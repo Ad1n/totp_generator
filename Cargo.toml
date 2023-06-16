@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 base32 = "0.4.0"
 ring = "0.16.20"
+clipboard = "0.5.0"
 
 [[bin]]
 name = "totp_generator"

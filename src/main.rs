@@ -1,4 +1,5 @@
-use base32;
+use clipboard::ClipboardContext;
+use clipboard::ClipboardProvider;
 use ring::hmac;
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -16,7 +17,10 @@ Parameters:
 }
 
 fn generate_totp_code(secret_key: &str) -> String {
-    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as u64;
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
     let secret_key_bytes = base32::decode(base32::Alphabet::RFC4648 { padding: false }, secret_key)
         .expect("Failed to decode secret key");
     let key = hmac::Key::new(hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, &secret_key_bytes);
@@ -24,10 +28,17 @@ fn generate_totp_code(secret_key: &str) -> String {
     let ref_code = code.as_ref();
     // 19 is the last index of HMAC::SHA1 bytes array
     let offset = (ref_code[19] & 0x0F) as usize;
-    let truncated_code: u32 =
-        ((ref_code[offset] as u32 & 0x7f) << 24 | (ref_code[offset + 1] as u32) << 16 |
-            (ref_code[offset + 2] as u32) << 8 | (ref_code[offset + 3] as u32)) % 1_000_000;
+    let truncated_code: u32 = ((ref_code[offset] as u32 & 0x7f) << 24
+        | (ref_code[offset + 1] as u32) << 16
+        | (ref_code[offset + 2] as u32) << 8
+        | (ref_code[offset + 3] as u32))
+        % 1_000_000;
     truncated_code.to_string()
+}
+
+fn print_result(totp_code: String, whole_pwd: String) {
+    println!("TOTP Code: {}", totp_code);
+    println!("Whole pwd: {}", whole_pwd);
 }
 
 fn main() {
@@ -41,6 +52,20 @@ fn main() {
     let secret_key = &args[1];
     let pwd = &args[2];
     let totp_code = generate_totp_code(secret_key);
-    println!("TOTP Code: {}", totp_code.clone());
-    println!("Whole pwd: {}{}", pwd, totp_code);
+    let whole_pwd = pwd.clone() + &totp_code;
+    // Copy the TOTP code to the clipboard
+    match ClipboardProvider::new() {
+        Ok(ctx) => {
+            let mut context: ClipboardContext = ctx;
+            if let Err(err) = context.set_contents(whole_pwd.clone()) {
+                eprintln!("Error copying to clipboard: {}", err);
+                print_result(totp_code.clone(), whole_pwd.clone());
+            }
+        }
+        Err(err) => {
+            eprintln!("Error initializing clipboard: {}", err);
+            print_result(totp_code.clone(), whole_pwd.clone());
+        }
+    }
+    print_result(totp_code, whole_pwd);
 }
