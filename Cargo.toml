@@ -1,0 +1,12 @@
+[package]
+name = "totp_generator"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+base32 = "0.4.0"
+ring = "0.16.20"
+
+[[bin]]
+name = "totp_generator"
+path = "src/main.rs"
