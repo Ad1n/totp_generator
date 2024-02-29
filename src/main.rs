@@ -4,6 +4,8 @@ use ring::hmac;
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+const TOTP_CODE_LENGTH: usize = 6;
+
 fn print_help() {
     let help_message = r#"
 Usage:
@@ -16,13 +18,18 @@ Parameters:
     println!("{}", help_message);
 }
 
-fn generate_totp_code(secret_key: &str) -> String {
+fn generate_totp_code(secret_key: &str) -> Option<String> {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    let secret_key_bytes = base32::decode(base32::Alphabet::RFC4648 { padding: false }, secret_key)
-        .expect("Failed to decode secret key");
+    let secret_key_bytes = match base32::decode(base32::Alphabet::RFC4648 { padding: false }, secret_key) {
+        None => {
+            eprintln!("Failed to decode secret key");
+            return None;
+        },
+        Some(b) => b,
+    };
     let key = hmac::Key::new(hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, &secret_key_bytes);
     let code = hmac::sign(&key, &(timestamp / 30).to_be_bytes());
     let ref_code = code.as_ref();
@@ -33,7 +40,8 @@ fn generate_totp_code(secret_key: &str) -> String {
         | (ref_code[offset + 2] as u32) << 8
         | (ref_code[offset + 3] as u32))
         % 1_000_000;
-    truncated_code.to_string()
+
+    Some(format!("{:0>width$}", truncated_code.to_string(), width = TOTP_CODE_LENGTH))
 }
 
 fn print_result(totp_code: String, whole_pwd: String) {
@@ -52,20 +60,23 @@ fn main() {
     let secret_key = &args[1];
     let pwd = &args[2];
     let totp_code = generate_totp_code(secret_key);
-    let whole_pwd = pwd.clone() + &totp_code;
-    // Copy the TOTP code to the clipboard
-    match ClipboardProvider::new() {
-        Ok(ctx) => {
-            let mut context: ClipboardContext = ctx;
-            if let Err(err) = context.set_contents(whole_pwd.clone()) {
-                eprintln!("Error copying to clipboard: {}", err);
+
+    if let Some(totp_code) = totp_code {
+        let whole_pwd = pwd.clone() + &totp_code;
+        // Copy the TOTP code to the clipboard
+        match ClipboardProvider::new() {
+            Ok(ctx) => {
+                let mut context: ClipboardContext = ctx;
+                if let Err(err) = context.set_contents(whole_pwd.clone()) {
+                    eprintln!("Error copying to clipboard: {}", err);
+                    print_result(totp_code.clone(), whole_pwd.clone());
+                }
+            }
+            Err(err) => {
+                eprintln!("Error initializing clipboard: {}", err);
                 print_result(totp_code.clone(), whole_pwd.clone());
             }
         }
-        Err(err) => {
-            eprintln!("Error initializing clipboard: {}", err);
-            print_result(totp_code.clone(), whole_pwd.clone());
-        }
+        print_result(totp_code, whole_pwd);
     }
-    print_result(totp_code, whole_pwd);
 }
