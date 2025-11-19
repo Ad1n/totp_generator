@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 base32 = "0.4.0"
-ring = "0.16.20"
+ring = "0.17"
 clipboard = "0.5.0"
 
 [[bin]]
